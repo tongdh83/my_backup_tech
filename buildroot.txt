@@ -1,0 +1,95 @@
+We are going to use buildroot to download, configure and compile the kernel.
+
+First, download  and uncompress buildroot: https://buildroot.org/download.html
+
+Go to the directory and:
+
+make qemu_x86_defconfig
+
+make menuconfig
+
+In Build options:
+  - Select 'build packages with debugging symbols'
+  - Go to 'gcc debug level' and select level 3
+  - Go to 'strip command for binaries on target' and select none
+  - Goto to 'gcc optimization level' and select 'optimize for debugging'
+  
+In Kernel:
+  - Go to 'Kernel version' and select 'Latest version'
+
+Save and exit
+
+make
+make linux-menuconfig
+Select 'CONFIG_DEBUG_INFO'
+make
+
+Start virtualization:
+qemu-system-i386 -kernel output/images/bzImage -hda output/images/rootfs.ext2 -append "root=/dev/sda rw" -s -S &
+
+Start GDB:
+gdb
+
+Then run the commands:
+  file ./output/build/linux-4.7.2/vmlinuz
+  target remote :1234
+  hbreak start_kernel
+  continue
+  
+Done. You are at the kernel's "main" function.
+
+================================================================================
+
+You can also do this by using VMware Workstation:
+
+- Go to your virtual machine settings
+- Look for the configuration file path
+- add debugStub.listen.guest64 = "1" for x86_64 kernels or debugStub.listen.guest32 = "1" for 32 bits
+- The log file will be showing the following line now:
+      Debug stub: VMware Workstation is listening for debug connection on port 8864
+      
+Source: http://stackframe.blogspot.com.br/2007/04/debugging-linux-kernels-with.html
+
+Debugging Linux kernels with Workstation 6.0
+We just quietly added an exciting feature to Workstation 6.0. I believe it will make WS6 a great tool for Linux kernel development. You can now use gdb on your host to debug the Linux kernel running inside the VM. No kdb, no recompiling and no need for second machine. All you need is a single line in VM's configuration file.
+
+To use the new feature, grab the latest build of Workstation here, or free 30-day evaluation here. Put this line into configuration file of your Linux VM:
+
+debugStub.listen.guest32=1
+
+Now whenever you run the virtual machine, you'll see the following in the vmware.log file (debug builds will also print this message to Host console):
+
+VMware Workstation is listening for debug connection on port 8832.
+
+Run gdb on the Host, reference it to the kernel with symbols and attach to the virtual machine:
+
+% gdb
+(gdb) file vmlinux-2.4.21-27.EL.debug
+(gdb) target remote localhost:8832
+
+That's it. The VM is blocked now, so you can "continue" it and "^C" back to gdb. Breakpoints, single step, memory inspection - all this works as usual. If you have SMP VM, then each VCPU is mapped on a thread, so use "info threads" and "thread NN" to switch between them.
+
+Debugging the 64-bit kernel works in the same way, except you need to use a different option:
+
+debugStub.listen.guest64=1
+
+and connect to port 8864. Since gdb starts in 32-bit mode by default, you may also need to switch it to i386:x64-64 before connecting:
+
+(gdb) set architecture i386:x86-64
+(gdb) target remote localhost:8864
+
+The kernels with symbols are sadly lacking on most distributions, but if you use RHEL then this website may help (look for kernel-debuginfo rpm):
+
+http://people.redhat.com/duffy/debuginfo/index-js.html
+
+The gdb support in WS6 is experimental, so there may be rough edges here and there. Please post on community forums if something doesn't work right or if you have a suggestion:
+
+http://communities.vmware.com/community/vmtn/general/guestdebugmonitor
+
+There are more debugging specific features in WS6 (for example, you can use gdb hand-in-hand with Record/Replay!). I will describe them shortly.
+
+Updated 4/20/07: added explanation of 64-bit support.
+Updated 5/14/07: release build prints "waiting for gdb" message into vmware.log only.
+Updated 7/24/07: pointers to new build and discussion forum.
+
+http://blog.dynofu.me/post/2015/10/08/linux-live-debugging-with-kgdb-vmware-workstion.html
